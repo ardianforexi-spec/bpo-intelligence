@@ -1,46 +1,35 @@
-# Created file inventory
+# Source inventory
 
-All authored source/configuration/documentation files and dependency locks created for Phase 1 are listed below. No existing project files were present.
+The repository contains the Vercel Services definition, local PostgreSQL Compose file,
+README, architecture/deployment/verification documents, the FastAPI backend and the
+React/Vite frontend.
 
-```text
-.gitignore
-.vercelignore
-vercel.json
-.env.example
-compose.yaml
-README.md
-docs/ARCHITECTURE.md
-docs/VERIFICATION.md
-docs/FILES.md
-docs/DEPLOYMENT.md
-backend/.env.example
-backend/.python-version
-backend/pyproject.toml
-backend/requirements.lock
-backend/app/__init__.py
-backend/app/main.py
-backend/app/serve.py
-backend/app/api/__init__.py
-backend/app/api/health.py
-backend/app/core/__init__.py
-backend/app/core/config.py
-backend/app/db/__init__.py
-backend/app/db/session.py
-backend/tests/test_health.py
-frontend/.env.example
-frontend/package.json
-frontend/package-lock.json
-frontend/index.html
-frontend/tsconfig.json
-frontend/vite.config.ts
-frontend/src/vite-env.d.ts
-frontend/src/main.tsx
-frontend/src/App.tsx
-frontend/src/styles.css
-frontend/src/lib/api.ts
-frontend/src/components/StatusCard.tsx
-```
+Backend application:
 
-Generated, ignored installation and verification artifacts: `.venv/` (Python packages), `backend/*.egg-info/`, Python `__pycache__/` directories, `backend/.pytest_cache/`, `frontend/node_modules/`, `frontend/.npm-cache/`, `frontend/tsconfig.tsbuildinfo`, and `frontend/dist/`. The production output contains `index.html` plus bundled JavaScript and CSS assets with content hashes. These artifacts are reproducible from the source and dependency locks; individual third-party package files are not part of the authored source inventory.
+- app/core/config.py: validated server configuration, PostgreSQL URI normalization.
+- app/db/session.py: async database lifecycle and bounded connection pool.
+- app/api/health.py: liveness and database readiness.
+- app/api/research.py: authenticated, quota-limited background research and reviewed import.
+- app/main.py, app/serve.py: application factory and local launcher.
+- schema.sql, schema_hardening.sql: ordered database migrations applied via Supabase.
+- tests/test_health.py, tests/test_research.py, tests/workspace_integration.sql.
 
-No credential-bearing `.env` file was created. Copy the provided examples and enter your own settings as described in the README.
+Frontend application:
+
+- src/App.tsx: sessions, workspace selection, navigation and data orchestration.
+- src/lib/supabase.ts: public client, typed record access, exports and safe CSV handling.
+- src/lib/modules.ts: module forms, pipeline stages, service and market configuration.
+- src/components/AuthScreen.tsx: login, signup and recovery.
+- src/components/DataPanels.tsx: record tables, dashboard, pipeline, analytics and activity.
+- src/components/RecordEditor.tsx: accessible record dialogs and draft templates.
+- src/components/CompanyProfile.tsx: company evidence/contact profile and score breakdown.
+- src/components/ResearchPanel.tsx: saved jobs, progress, findings review and import.
+- src/components/WorkspaceSettings.tsx: team, account, CSV import, markets and exports.
+- src/lib/api.ts and src/components/StatusCard.tsx: original health helpers retained.
+- src/styles.css, src/workspace.css: branding, responsive layout and component styles.
+- tests/public.smoke.mjs, tests/workspace.smoke.mjs: headless Chrome UI/CSV checks.
+
+Dependency manifests/locks, TypeScript/Vite configuration and environment examples are
+tracked. Credential files, node_modules, .venv, dist, caches, QA browser artifacts and
+local QA state are ignored and never included in publication.
+

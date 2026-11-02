@@ -8,7 +8,7 @@ export function RecordEditor({ module, record, initial, data, workspace, onClose
 }) {
   const dialog = useRef<HTMLDialogElement>(null)
   const [values, setValues] = useState<Record<string, unknown>>(() => Object.fromEntries(module.fields.map(field => [field.key,
-    record?.[field.key] ?? initial?.[field.key] ?? (field.type === 'checkbox' ? false : field.type === 'services' ? [] : field.type === 'select' && field.options && !field.entity ? field.options[0] : ''),
+    record?.[field.key] ?? initial?.[field.key] ?? (field.type === 'checkbox' ? false : field.type === 'services' ? [] : field.type === 'select' && field.options && !field.entity && field.key !== 'country' ? field.options[0] : ''),
   ])))
   const [error, setError] = useState(''); const [busy, setBusy] = useState(false)
   useEffect(() => { const node = dialog.current; node?.showModal(); return () => node?.close() }, [])
@@ -41,7 +41,7 @@ export function RecordEditor({ module, record, initial, data, workspace, onClose
         return <label key={field.key} className={field.type === 'textarea' ? 'full' : ''} htmlFor={inputId}>{field.label}{field.required && <span className="required"> *</span>}
           {field.type === 'textarea' ? <textarea id={inputId} value={String(value ?? '')} required={field.required} maxLength={field.max || 10000} rows={field.key === 'body' ? 9 : 4} onChange={e => set(field.key, e.target.value)} />
           : field.type === 'select' ? <select id={inputId} value={String(value ?? '')} required={field.required} onChange={e => { set(field.key,e.target.value); if (field.key === 'company_id') set('contact_id','') }}>
-            {(field.entity || !field.required) && <option value="">{field.entity ? `Select ${field.entity === 'companies' ? 'company' : field.entity === 'contacts' ? 'contact' : 'campaign'}` : 'Not specified'}</option>}
+            {(field.entity || field.key === 'country') && <option value="">{field.entity ? `Select ${field.entity === 'companies' ? 'company' : field.entity === 'contacts' ? 'contact' : 'campaign'}` : 'Not specified'}</option>}
             {field.entity ? choices.map(row => <option key={row.id} value={row.id}>{str(row,'name') || str(row,'email')}</option>) : field.options?.map(option => <option key={option}>{option}</option>)}
           </select> : <input id={inputId} type={field.type || 'text'} value={String(value ?? '')} required={field.required} maxLength={field.max || 500} min={field.type === 'number' ? 0 : undefined} step={field.type === 'number' ? 'any' : undefined} onChange={e => set(field.key, e.target.value)} />}
           {field.hint && <small>{field.hint}</small>}

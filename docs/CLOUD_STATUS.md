@@ -40,3 +40,16 @@ not native XLSX upload. Research uses seven review tasks in one bounded backgrou
 provider request, not seven autonomous scheduled workers. These boundaries are explicit
 in the README and product flow; they are not claimed as completed unsupported features.
 
+## CRM production deployment verified
+
+Deployment dpl_E6kbUWEBaEAyXwr2rxavgED64u51 is READY from commit
+f36fd5d4c53f3c96458095b7baa3bb6d32dc0275. Production / and all referenced JS/CSS
+assets returned HTTP 200; liveness returned status=ok; readiness returned
+status=ready, database=connected. Capabilities returned auth=true and research=false.
+
+An additional isolated browser fixture test passed company/contact forms, company
+profile, all navigation modules, mobile layout and browser-exception checks. Supabase
+calls were intercepted for this UI test; actual access controls and CRUD were tested
+separately in the real rollback SQL transaction. Full real-account UI verification
+remains pending explicit test-account approval or the user's own signed-in test.
+
