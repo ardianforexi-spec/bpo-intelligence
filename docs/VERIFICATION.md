@@ -40,3 +40,12 @@ Paid-provider authorization tests added: public signup alone cannot access AI,
 nonmembers cannot access a licensed workspace, and licensed team members can.
 Updated backend result: 18 passed, 1 optional local integration test skipped.
 
+## Research provider error handling
+
+Research failures now distinguish exhausted API credits, rate limits, output limits,
+cancellation, invalid results and other provider errors. Redacted diagnostic details
+remain inside workspace-protected research rows. Failed runs can recheck the existing
+provider response without starting another paid generation request. Partial outputs
+are never imported. Targeted tests cover error specificity and secret redaction.
+Updated backend checks: 25 passed, 1 optional local database integration skipped.
+

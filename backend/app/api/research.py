@@ -18,6 +18,7 @@ SERVICES = ['Customer Support','Sales & Appointment Setting','Data Entry & Proce
 
 
 PROVIDER_ERRORS = {
+    'credit_balance_exhausted': 'Your OpenAI API account has no credits remaining. Add credits in OpenAI API Billing, then start a new research run.',
     'insufficient_quota': 'OpenAI credits or spending quota are exhausted. Check API Billing and project limits, then start a new run.',
     'billing_hard_limit_reached': 'The OpenAI spending limit was reached. Check API Billing and project limits.',
     'rate_limit_exceeded': 'OpenAI rate limits were reached. Wait briefly and start a new run; also check project rate and spending limits.',
@@ -30,7 +31,7 @@ PROVIDER_ERRORS = {
 
 
 def provider_outcome(response: dict) -> tuple[str,dict,str|None]:
-    """Persist only bounded diagnostic codes, never raw provider messages or partial JSON."""
+    """Keep actionable errors and workspace-private redacted details, never secrets or partial findings."""
     status=response.get('status')
     if status in ('queued','in_progress'):
         return 'Running',{},None
@@ -263,25 +264,6 @@ async def refresh_research(run_id:UUID,request:Request,authorization:Annotated[s
         await connection.execute(text("update public.bpo_research_runs set status=:status,result=cast(:result as jsonb),error=:error where id=:id and status in ('Running','Failed')"),
           {'status':new_status,'result':json.dumps(result),'error':error,'id':run_id})
     return {'status':new_status}
-
-
-async def reconcile_configured_run(database,settings) -> None:
-    """Owner-configured maintenance: inspect one existing response without starting paid generation."""
-    run_id=settings.research_reconcile_run_id
-    if run_id is None or database.engine is None or not settings.openai_api_key:
-        return
-    async with database.engine.connect() as connection:
-        run=(await connection.execute(text("select id,response_id from public.bpo_research_runs where id=:id and status='Failed'"),{'id':run_id})).mappings().first()
-    if not run or not run['response_id']:
-        return
-    response=await asyncio.to_thread(json_request,'https://api.openai.com/v1/responses/'+run['response_id'],
-      {'Authorization':'Bearer '+settings.openai_api_key.get_secret_value()},None,None,12)
-    status,result,error=provider_outcome(response)
-    if status=='Running':
-        return
-    async with database.engine.begin() as connection:
-        await connection.execute(text("update public.bpo_research_runs set status=:status,result=cast(:result as jsonb),error=:error where id=:id and status='Failed'"),
-          {'status':status,'result':json.dumps(result),'error':error,'id':run_id})
 
 
 @router.post('/research/{run_id}/cancel')

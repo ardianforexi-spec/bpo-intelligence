@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.health import router
-from app.api.research import router as research_router, reconcile_configured_run
+from app.api.research import router as research_router
 from app.core.config import Settings
 from app.db.session import Database
 
@@ -23,11 +23,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def lifespan(application: FastAPI) -> AsyncIterator[None]:
         database = Database(config)
         application.state.database = database
-        if config.research_reconcile_run_id:
-            try:
-                await reconcile_configured_run(database,config)
-            except Exception:
-                logging.getLogger(__name__).warning('Configured research reconciliation could not complete')
         try:
             yield
         finally:

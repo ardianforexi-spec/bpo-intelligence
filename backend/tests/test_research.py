@@ -104,8 +104,12 @@ def test_unknown_provider_error_is_not_copied_to_clients():
     assert 'private prompt' not in error
 
 
-def test_reconcile_configuration_can_be_disabled():
-    assert Settings(_env_file=None,research_reconcile_run_id='').research_reconcile_run_id is None
+def test_empty_openai_credit_balance_has_clear_billing_instructions():
+    status,result,error=provider_outcome({'status':'failed','error':{'code':'credit_balance_exhausted','message':'Account has no credits'}})
+    assert status=='Failed'
+    assert result['diagnostics']['error_code']=='credit_balance_exhausted'
+    assert 'no credits' in error
+    assert 'Billing' in error
 
 
 def test_workspace_diagnostics_redact_keys_and_connection_urls():
