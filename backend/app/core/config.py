@@ -13,6 +13,7 @@ class Settings(BaseSettings):
         env_file=Path(__file__).resolve().parents[2] / ".env",
         env_file_encoding="utf-8",
         extra="ignore",
+        hide_input_in_errors=True,
     )
 
     app_env: Literal["development", "test", "production"] = "development"
@@ -33,6 +34,8 @@ class Settings(BaseSettings):
         if value is not None:
             try:
                 url = make_url(value.get_secret_value())
+                if url.drivername == "postgresql":
+                    url = url.set(drivername="postgresql+psycopg")
                 valid = (
                     url.drivername == "postgresql+psycopg"
                     and bool(url.host)
@@ -42,4 +45,7 @@ class Settings(BaseSettings):
                 valid = False
             if not valid:
                 raise ValueError("DATABASE_URL must be a postgresql+psycopg URL with host and database")
+            if url.host and url.host.endswith(".supabase.com") and "sslmode" not in url.query:
+                url = url.update_query_dict({"sslmode": "require"})
+            return SecretStr(url.render_as_string(hide_password=False))
         return value
