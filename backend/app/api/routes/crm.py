@@ -5,7 +5,7 @@ from sqlalchemy import Select, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import Company, Contact, Lead
+from app.db.models import Company, Contact, JobSignal, Lead, ResearchSource
 from app.db.session import get_db_session
 from app.schemas.crm import (
     CompanyCreate,
@@ -17,6 +17,7 @@ from app.schemas.crm import (
     LeadRead,
     LeadUpdate,
 )
+from app.services.lead_intelligence import score_lead
 
 router = APIRouter(tags=["crm"])
 
@@ -126,6 +127,23 @@ async def list_leads(
 async def update_lead(lead_id: UUID, payload: LeadUpdate, session: AsyncSession = Depends(get_db_session)) -> Lead:
     lead = await get_or_404(session, Lead, lead_id)
     apply_update(lead, payload.model_dump(exclude_unset=True))
+    await commit_or_conflict(session)
+    await session.refresh(lead)
+    return lead
+
+
+@router.post("/leads/{lead_id}/recalculate", response_model=LeadRead)
+async def recalculate_lead(lead_id: UUID, session: AsyncSession = Depends(get_db_session)) -> Lead:
+    """Recalculate score from stored evidence only; it never invents research findings."""
+    lead = await get_or_404(session, Lead, lead_id)
+    company = await get_or_404(session, Company, lead.company_id)
+    contacts = list((await session.scalars(select(Contact).where(Contact.company_id == company.id))).all())
+    signals = list((await session.scalars(select(JobSignal).where(JobSignal.company_id == company.id))).all())
+    sources = list((await session.scalars(select(ResearchSource).where(ResearchSource.company_id == company.id))).all())
+    result = score_lead(company, contacts, signals, sources)
+    lead.score = result.score
+    lead.score_explanation = result.explanation
+    lead.potential_services = result.services
     await commit_or_conflict(session)
     await session.refresh(lead)
     return lead
