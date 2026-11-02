@@ -8,7 +8,7 @@ from uuid import uuid4
 from fastapi.testclient import TestClient
 from app.main import create_app
 from app.core.config import Settings
-from app.api.research import access, extract_findings, findings_schema
+from app.api.research import access, extract_findings, findings_schema, provider_outcome
 
 
 def test_research_requires_authentication():
@@ -74,4 +74,36 @@ def test_nonmember_cannot_access_even_licensed_workspace():
 
 def test_licensed_workspace_member_can_research():
     asyncio.run(access(research_access_request(True,True),uuid4(),uuid4()))
+
+
+@pytest.mark.parametrize('state',['queued','in_progress'])
+def test_pending_provider_status_stays_running(state):
+    assert provider_outcome({'status':state})==('Running',{},None)
+
+
+def test_provider_output_limit_has_specific_error_and_no_partial_findings():
+    status,result,error=provider_outcome({'status':'incomplete','incomplete_details':{'reason':'max_output_tokens'},'output':[{'type':'message','content':[{'type':'output_text','text':'partial-private-content'}]}]})
+    assert status=='Failed'
+    assert 'output limit' in error
+    assert result=={'diagnostics':{'provider_status':'incomplete','incomplete_reason':'max_output_tokens'}}
+    assert 'partial-private-content' not in json.dumps(result)
+
+
+def test_provider_quota_error_is_actionable_without_disclosing_raw_message():
+    status,result,error=provider_outcome({'status':'failed','error':{'code':'insufficient_quota','message':'private billing details sk-private'}})
+    assert status=='Failed'
+    assert result['diagnostics']['error_code']=='insufficient_quota'
+    assert 'Billing' in error
+    assert 'sk-private' not in error
+
+
+def test_unknown_provider_error_is_not_copied_to_clients():
+    _,result,error=provider_outcome({'status':'failed','error':{'code':'secret-code','message':'private prompt'}})
+    assert result['diagnostics']['error_code']=='unknown_provider_error'
+    assert 'secret-code' not in error
+    assert 'private prompt' not in error
+
+
+def test_reconcile_configuration_can_be_disabled():
+    assert Settings(_env_file=None,research_reconcile_run_id='').research_reconcile_run_id is None
 

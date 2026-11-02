@@ -2,6 +2,7 @@
 
 from pathlib import Path
 from typing import Literal
+from uuid import UUID
 
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -25,6 +26,12 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-5-mini"
     research_daily_limit: int = Field(default=20, ge=1, le=500)
     research_owner_email: str = ""
+    research_reconcile_run_id: UUID | None = None
+
+    @field_validator('research_reconcile_run_id',mode='before')
+    @classmethod
+    def empty_reconcile_run(cls,value:object)->object:
+        return None if value=='' else value
     db_pool_size: int = Field(default=2, ge=1, le=20)
     db_max_overflow: int = Field(default=0, ge=0, le=20)
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]

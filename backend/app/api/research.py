@@ -16,14 +16,63 @@ KINDS = ['Hiring','Company size','Growth','Potential demand','Decision maker','V
 SERVICES = ['Customer Support','Sales & Appointment Setting','Data Entry & Processing','Data Analytics','Technical Support','Back Office Operations','Virtual Assistants']
 
 
-def json_request(url: str, headers: dict, payload: dict | None = None, method: str | None = None) -> dict:
+PROVIDER_ERRORS = {
+    'insufficient_quota': 'OpenAI credits or spending quota are exhausted. Check API Billing and project limits, then start a new run.',
+    'billing_hard_limit_reached': 'The OpenAI spending limit was reached. Check API Billing and project limits.',
+    'rate_limit_exceeded': 'OpenAI rate limits were reached. Wait briefly and start a new run; also check project rate and spending limits.',
+    'invalid_api_key': 'OpenAI rejected the API key. Update OPENAI_API_KEY in Vercel Production and redeploy.',
+    'model_not_found': 'The configured OpenAI model is unavailable to this API project. Check model access.',
+    'permission_denied': 'The OpenAI key does not have permission for this request. Check its project permissions.',
+    'server_error': 'OpenAI encountered a server error. Start a new run shortly.',
+    'content_filter': 'OpenAI could not complete this request due to its content filters. Rephrase the company-research criteria.',
+}
+
+
+def provider_outcome(response: dict) -> tuple[str,dict,str|None]:
+    """Persist only bounded diagnostic codes, never raw provider messages or partial JSON."""
+    status=response.get('status')
+    if status in ('queued','in_progress'):
+        return 'Running',{},None
+    if status=='completed':
+        try:
+            return 'Completed',extract_findings(response),None
+        except (ValueError,KeyError,TypeError):
+            return 'Failed',{'diagnostics':{'provider_status':'completed','error_code':'invalid_result'}},'OpenAI completed the request but its findings could not be validated. No partial findings were imported.'
+    reason=(response.get('incomplete_details') or {}).get('reason')
+    code=(response.get('error') or {}).get('code')
+    safe_status=status if status in ('failed','incomplete','cancelled') else 'unknown'
+    diagnostics={'provider_status':safe_status}
+    if status=='cancelled':
+        return 'Cancelled',{'diagnostics':diagnostics},'This research run was cancelled.'
+    if reason in ('max_output_tokens','max_messages','content_filter','steered'):
+        diagnostics['incomplete_reason']=reason
+    if reason=='max_output_tokens':
+        error='OpenAI reached the research output limit before finishing. Start a new run with fewer companies or narrower criteria.'
+    elif reason=='content_filter':
+        error=PROVIDER_ERRORS['content_filter']
+    elif code in PROVIDER_ERRORS:
+        diagnostics['error_code']=code
+        error=PROVIDER_ERRORS[code]
+    else:
+        diagnostics['error_code']='unknown_provider_error'
+        error='OpenAI did not complete the research. Check the failed request in your OpenAI API logs before retrying.'
+    return 'Failed',{'diagnostics':diagnostics},error
+
+
+def json_request(url: str, headers: dict, payload: dict | None = None, method: str | None = None, timeout: int = 45) -> dict:
     req = http.Request(url, data=json.dumps(payload).encode() if payload is not None else None,
                        headers={**headers, 'Content-Type':'application/json'}, method=method)
     try:
-        with http.urlopen(req, timeout=45) as response:
+        with http.urlopen(req, timeout=timeout) as response:
             return json.loads(response.read(2_000_000))
     except http_error.HTTPError as exc:
-        # Provider error bodies can contain private inputs. Do not return or log them.
+        try:
+            code=json.loads(exc.read(32000)).get('error',{}).get('code')
+        except (ValueError,AttributeError):
+            code=None
+        if code in PROVIDER_ERRORS:
+            raise HTTPException(502,PROVIDER_ERRORS[code]) from None
+        # Raw provider error messages may contain private inputs and must stay hidden.
         raise HTTPException(502, f"Provider request failed ({exc.code}). Check configuration, credits and model access.") from None
     except (OSError, ValueError):
         raise HTTPException(502, 'The provider could not be reached. Try again shortly.') from None
@@ -197,20 +246,34 @@ async def owned_run(request:Request,run_id:UUID,authorization:str|None) -> dict:
 @router.post('/research/{run_id}/refresh')
 async def refresh_research(run_id:UUID,request:Request,authorization:Annotated[str|None,Header()]=None) -> dict:
     run=await owned_run(request,run_id,authorization)
-    if run['status']!='Running': return {'status':run['status']}
+    if run['status'] not in ('Running','Failed') or not run['response_id']: return {'status':run['status']}
     response=await asyncio.to_thread(json_request,'https://api.openai.com/v1/responses/'+run['response_id'],provider_headers(request))
-    status=response.get('status')
-    if status in ('queued','in_progress'): return {'status':'Running'}
-    result={}; error=None
-    if status=='completed':
-        try: result=extract_findings(response)
-        except (ValueError,KeyError,TypeError): error='The provider returned an invalid or incomplete result. Start a new run.'
-    else: error='Research did not complete. Try a narrower query or check provider limits.'
-    new_status='Failed' if error else 'Completed'
+    new_status,result,error=provider_outcome(response)
+    if new_status=='Running' and run['status']=='Running':
+        return {'status':'Running'}
     async with request.app.state.database.engine.begin() as connection:
-        await connection.execute(text("update public.bpo_research_runs set status=:status,result=cast(:result as jsonb),error=:error where id=:id and status='Running'"),
+        await connection.execute(text("update public.bpo_research_runs set status=:status,result=cast(:result as jsonb),error=:error where id=:id and status in ('Running','Failed')"),
           {'status':new_status,'result':json.dumps(result),'error':error,'id':run_id})
     return {'status':new_status}
+
+
+async def reconcile_configured_run(database,settings) -> None:
+    """Owner-configured maintenance: inspect one existing response without starting paid generation."""
+    run_id=settings.research_reconcile_run_id
+    if run_id is None or database.engine is None or not settings.openai_api_key:
+        return
+    async with database.engine.connect() as connection:
+        run=(await connection.execute(text("select id,response_id from public.bpo_research_runs where id=:id and status='Failed'"),{'id':run_id})).mappings().first()
+    if not run or not run['response_id']:
+        return
+    response=await asyncio.to_thread(json_request,'https://api.openai.com/v1/responses/'+run['response_id'],
+      {'Authorization':'Bearer '+settings.openai_api_key.get_secret_value()},None,None,12)
+    status,result,error=provider_outcome(response)
+    if status=='Running':
+        return
+    async with database.engine.begin() as connection:
+        await connection.execute(text("update public.bpo_research_runs set status=:status,result=cast(:result as jsonb),error=:error where id=:id and status='Failed'"),
+          {'status':status,'result':json.dumps(result),'error':error,'id':run_id})
 
 
 @router.post('/research/{run_id}/cancel')
