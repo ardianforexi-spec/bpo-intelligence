@@ -107,3 +107,11 @@ def test_unknown_provider_error_is_not_copied_to_clients():
 def test_reconcile_configuration_can_be_disabled():
     assert Settings(_env_file=None,research_reconcile_run_id='').research_reconcile_run_id is None
 
+
+def test_workspace_diagnostics_redact_keys_and_connection_urls():
+    _,result,_=provider_outcome({'status':'failed','error':{'code':'invalid_prompt','message':'detail sk-private-key sb_secret_private Bearer private-token postgresql://user:secret@host/db'}})
+    encoded=json.dumps(result)
+    for secret in ['sk-private-key','sb_secret_private','private-token','user:secret']:
+        assert secret not in encoded
+    assert result['diagnostics']['error_code']=='invalid_prompt'
+

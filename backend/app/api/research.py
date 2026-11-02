@@ -3,6 +3,7 @@
 import asyncio
 from datetime import datetime
 import json
+import re
 from typing import Annotated, Literal
 from urllib import request as http, error as http_error
 from uuid import UUID, uuid4
@@ -54,7 +55,14 @@ def provider_outcome(response: dict) -> tuple[str,dict,str|None]:
         diagnostics['error_code']=code
         error=PROVIDER_ERRORS[code]
     else:
-        diagnostics['error_code']='unknown_provider_error'
+        diagnostics['error_code']=code if isinstance(code,str) and re.fullmatch(r'[a-z][a-z0-9_]{0,63}',code) else 'unknown_provider_error'
+        raw_message=(response.get('error') or {}).get('message')
+        if isinstance(raw_message,str):
+            # Diagnostic details stay in the run's workspace-protected row, never logs/public capabilities.
+            safe_message=re.sub(r'(?i)\b(?:sk-|sb_secret_)[a-z0-9_-]+','[redacted]',raw_message)
+            safe_message=re.sub(r'(?i)bearer\s+[a-z0-9._-]+','Bearer [redacted]',safe_message)
+            safe_message=re.sub(r'(?i)postgres(?:ql)?(?:\+[a-z0-9_]+)?://\S+','[redacted database URL]',safe_message)
+            diagnostics['provider_message']=safe_message[:1200]
         error='OpenAI did not complete the research. Check the failed request in your OpenAI API logs before retrying.'
     return 'Failed',{'diagnostics':diagnostics},error
 
