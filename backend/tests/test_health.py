@@ -60,6 +60,28 @@ def test_database_settings_require_postgres():
         Settings(_env_file=None, database_url="sqlite:///local.db")
 
 
+def test_supabase_uri_uses_psycopg_and_tls():
+    settings = Settings(
+        _env_file=None,
+        database_url="postgresql://postgres.example:test%40password@aws-0-eu-west-2.pooler.supabase.com:5432/postgres",
+    )
+    assert settings.database_url.get_secret_value() == (
+        "postgresql+psycopg://postgres.example:test%40password@"
+        "aws-0-eu-west-2.pooler.supabase.com:5432/postgres?sslmode=require"
+    )
+
+
+def test_explicit_database_tls_is_preserved():
+    uri = "postgresql+psycopg://user:secret@aws-0-eu-west-2.pooler.supabase.com:5432/postgres?sslmode=verify-full"
+    assert Settings(_env_file=None, database_url=uri).database_url.get_secret_value() == uri
+
+
+def test_invalid_database_url_is_hidden_in_validation_errors():
+    with pytest.raises(ValidationError) as caught:
+        Settings(_env_file=None, database_url="mysql://user:private-password@db.example/test")
+    assert "private-password" not in str(caught.value)
+
+
 def test_production_hides_docs():
     with TestClient(create_app(Settings(_env_file=None, app_env="production", database_url=None))) as client:
         assert client.get("/docs").status_code == 404
