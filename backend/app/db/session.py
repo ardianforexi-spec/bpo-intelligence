@@ -1,17 +1,32 @@
-from collections.abc import AsyncGenerator
+"""Async PostgreSQL engine and session factory owned by the application lifespan."""
 
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
-from app.core.config import get_settings
-
-settings = get_settings()
-# Supabase requires encrypted Postgres traffic. Local PostgreSQL keeps its default behaviour.
-connect_args = {"ssl": "require"} if "supabase.co" in settings.database_url else {}
-engine = create_async_engine(settings.database_url, pool_pre_ping=True, connect_args=connect_args)
-AsyncSessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+from app.core.config import Settings
 
 
-async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
-    """Provide an async database session for future API endpoints."""
-    async with AsyncSessionLocal() as session:
-        yield session
+class Database:
+    def __init__(self, settings: Settings) -> None:
+        self.engine: AsyncEngine | None = None
+        self.sessions: async_sessionmaker[AsyncSession] | None = None
+        if settings.database_url:
+            self.engine = create_async_engine(
+                settings.database_url.get_secret_value(),
+                pool_pre_ping=True,
+                pool_size=settings.db_pool_size,
+                max_overflow=settings.db_max_overflow,
+                connect_args={"connect_timeout": 3},
+                hide_parameters=True,
+            )
+            self.sessions = async_sessionmaker(self.engine, expire_on_commit=False)
+
+    async def ping(self) -> None:
+        if self.engine is None:
+            raise RuntimeError("Database is not configured")
+        async with self.engine.connect() as connection:
+            await connection.execute(text("SELECT 1"))
+
+    async def close(self) -> None:
+        if self.engine is not None:
+            await self.engine.dispose()

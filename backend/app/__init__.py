@@ -1,1 +1,1 @@
-"""BPO Intelligence backend package."""
+"""BPO Intelligence backend."""

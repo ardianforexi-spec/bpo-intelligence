@@ -1,33 +1,45 @@
-from functools import lru_cache
-from typing import Annotated, Literal
+"""Validated configuration loaded independently of the launch directory."""
 
-from pydantic import AnyHttpUrl, BeforeValidator, Field
+from pathlib import Path
+from typing import Literal
+
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-
-
-def parse_origins(value: object) -> object:
-    """Accept a comma-separated origin list in .env files."""
-    if isinstance(value, str) and not value.lstrip().startswith("["):
-        return [origin.strip() for origin in value.split(",") if origin.strip()]
-    return value
-
-
-CorsOrigins = Annotated[list[AnyHttpUrl], BeforeValidator(parse_origins)]
+from sqlalchemy.engine import make_url
 
 
 class Settings(BaseSettings):
-    """Environment-backed application configuration."""
+    model_config = SettingsConfigDict(
+        env_file=Path(__file__).resolve().parents[2] / ".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
-    model_config = SettingsConfigDict(env_file="../.env", env_file_encoding="utf-8", extra="ignore")
+    app_env: Literal["development", "test", "production"] = "development"
+    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
+    database_url: SecretStr | None = None
+    db_pool_size: int = Field(default=2, ge=1, le=20)
+    db_max_overflow: int = Field(default=0, ge=0, le=20)
+    cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
 
-    app_name: str = "BPO Intelligence API"
-    app_env: Literal["development", "test", "staging", "production"] = "development"
-    api_v1_prefix: str = "/api/v1"
-    log_level: str = "INFO"
-    database_url: str = "postgresql+asyncpg://bpo_user:change-me@localhost:5432/bpo_intelligence"
-    backend_cors_origins: CorsOrigins = Field(default_factory=lambda: ["http://localhost:5173"])
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def empty_database_url(cls, value: object) -> object:
+        return None if value == "" else value
 
-
-@lru_cache
-def get_settings() -> Settings:
-    return Settings()
+    @field_validator("database_url")
+    @classmethod
+    def validate_database_url(cls, value: SecretStr | None) -> SecretStr | None:
+        if value is not None:
+            try:
+                url = make_url(value.get_secret_value())
+                valid = (
+                    url.drivername == "postgresql+psycopg"
+                    and bool(url.host)
+                    and bool(url.database)
+                )
+            except Exception:
+                valid = False
+            if not valid:
+                raise ValueError("DATABASE_URL must be a postgresql+psycopg URL with host and database")
+        return value

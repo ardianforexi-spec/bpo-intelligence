@@ -1,36 +1,50 @@
+"""Application factory and resource lifecycle."""
+
+import logging
 from contextlib import asynccontextmanager
+from collections.abc import AsyncIterator
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes.health import router as health_router
-from app.api.routes.crm import router as crm_router
-from app.core.config import get_settings
-from app.core.logging import configure_logging
-
-settings = get_settings()
+from app.api.health import router
+from app.core.config import Settings
+from app.db.session import Database
 
 
-@asynccontextmanager
-async def lifespan(_: FastAPI):
-    configure_logging(settings.log_level)
-    yield
+def create_app(settings: Settings | None = None) -> FastAPI:
+    config = settings or Settings()
+    logging.basicConfig(
+        level=config.log_level,
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    )
+    @asynccontextmanager
+    async def lifespan(application: FastAPI) -> AsyncIterator[None]:
+        database = Database(config)
+        application.state.database = database
+        try:
+            yield
+        finally:
+            await database.close()
+
+    application = FastAPI(
+        title="BPO Intelligence API",
+        version="0.1.0",
+        description="Phase 1 infrastructure. CRM and research endpoints arrive in later phases.",
+        lifespan=lifespan,
+        docs_url="/docs" if config.app_env != "production" else None,
+        redoc_url=None,
+        openapi_url="/openapi.json" if config.app_env != "production" else None,
+    )
+    application.add_middleware(
+        CORSMiddleware,
+        allow_origins=config.cors_origins,
+        allow_credentials=False,
+        allow_methods=["GET"],
+        allow_headers=["Accept", "Content-Type"],
+    )
+    application.include_router(router)
+    return application
 
 
-app = FastAPI(
-    title=settings.app_name,
-    version="0.1.0",
-    description="API for BPO lead research and CRM operations.",
-    lifespan=lifespan,
-)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[str(origin).rstrip("/") for origin in settings.backend_cors_origins],
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
-    allow_headers=["Authorization", "Content-Type"],
-)
-
-app.include_router(health_router, prefix=settings.api_v1_prefix)
-app.include_router(crm_router, prefix=settings.api_v1_prefix)
+app = create_app()
