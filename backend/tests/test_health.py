@@ -94,3 +94,4 @@ def test_real_postgres_readiness():
         assert client.get("/api/v1/health/ready").json() == {
             "status": "ready", "database": "connected"
         }
+

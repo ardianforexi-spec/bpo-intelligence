@@ -1,135 +1,110 @@
 # BPO Intelligence
 
-An evidence-led B2B research and CRM platform for a Kosovo-based outsourcing team of 10–20 agents. Target markets: US, Canada, UK, Australia, Germany, Austria, and Switzerland. Languages: English and German.
+A shared, evidence-led prospecting and CRM workspace for a Kosovo outsourcing team of 10–20 agents, serving English and German markets.
 
-**Current scope: Phase 1 foundation.** The API and frontend start locally. No research, contacts, company records, scoring, or outreach are implemented yet. Navigation identifies the implementation phase for each future module. The market list is business configuration, not discovered companies. No fabricated leads are included.
+Production: https://bpo-intelligence.vercel.app
 
-## Requirements
+## What works
 
-- Python 3.12+ (verified here with Python 3.14.5).
-- Node.js 22.18+ or 24+ and npm. The native Vite TypeScript config loader requires Node's built-in TypeScript support; verified with Node 24.14.0.
-- PostgreSQL 17, either locally installed or through Docker Compose. Docker is optional for API/frontend startup.
-- PostgreSQL credentials for database readiness. No external API keys are needed in Phase 1.
+- Supabase email/password sign-in, account confirmation, password recovery and sign-out.
+- Separate workspaces, owner-managed team membership, and PostgreSQL row-level access control.
+- Company and contact CRUD, domain/email deduplication, source URLs and verification status.
+- Leads, campaign filters, follow-up dates, assigned teammate names and a stage-based pipeline.
+- Evidence and hiring findings with acquisition dates, event dates and human verification.
+- Evidence-coverage scores from verified categories, with each category counted once. Scores do not predict outsourcing intent.
+- English/German outreach draft templates, editable review states and suppression. No automatic sending.
+- Saved dashboard totals, pipeline and currency-separated analytics, activity history and target markets.
+- Quoted UTF-8 CSV import/export, duplicate skipping, spreadsheet formula protection and JSON workspace archives.
+- Optional OpenAI web research with saved background jobs, refresh/cancel, validated consulted sources and reviewed import into CRM.
 
-## Install (PowerShell, from the project root)
+Research results are never auto-verified. Unknowns stay blank. No fabricated leads are seeded.
+
+## First use
+
+1. Open production and choose Create an account.
+2. Confirm your email, return to the app and sign in.
+3. Create your workspace, or ask an existing workspace owner to add your verified account email under Settings.
+4. Add a company or import companies from the CSV template, then add contacts and leads.
+5. Record evidence and check each source before marking it verified. Use the pipeline to track next actions.
+6. Draft outreach from a company, select a professional contact and review the text. A contact must be verified and unsuppressed before approving a draft.
+
+## Cloud configuration
+
+Vercel uses the repository root and vercel.json Services for the Vite frontend and FastAPI backend.
+
+| Variable | Scope | Purpose |
+| --- | --- | --- |
+| DATABASE_URL | Sensitive, Production backend | Supabase Session pooler PostgreSQL URI; ordinary postgresql:// and postgresql+psycopg:// are supported |
+| APP_ENV | Production backend | production |
+| SUPABASE_URL | Backend | Supabase project HTTPS origin |
+| SUPABASE_PUBLISHABLE_KEY | Backend | Public publishable key used to validate user sessions with Supabase Auth |
+| VITE_SUPABASE_URL | Public frontend | Same project origin |
+| VITE_SUPABASE_PUBLISHABLE_KEY | Public frontend | Publishable key, never service-role or secret key |
+| VITE_API_BASE_URL | Public frontend | /api/v1 |
+| OPENAI_API_KEY | Sensitive, Production backend | Optional provider key for research; never a VITE variable |
+| OPENAI_MODEL | Backend | Optional model; default gpt-5-mini |
+| RESEARCH_DAILY_LIMIT | Backend | Maximum starts per workspace per rolling 24 hours; default 20 |
+| DB_POOL_SIZE / DB_MAX_OVERFLOW | Backend | 2 / 0 by default |
+
+Supabase Auth → URL Configuration must use the real production origin as Site URL and allow the same origin in Redirect URLs for confirmation/recovery links. Configure a production email provider in Supabase when the built-in email delivery limits are insufficient. The application does not retrieve or reset database passwords.
+
+Never commit credentials. The database key is server-only; public Supabase keys rely on RLS and table grants. Production credentials are not automatically copied to preview environments. Redeploy after changing Vercel variables.
+
+## Database schema
+
+The existing project received two additive migrations via the connected Supabase migration tool:
+
+1. backend/schema.sql — normalized workspace/CRM tables, policies, audit triggers and scoring view.
+2. backend/schema_hardening.sql — suppression lifecycle, stronger validation and privileged helper boundaries.
+
+These are ordered SQL migrations. Apply them only once to a new intended Supabase project, in the listed order. Existing records in unrelated project tables are preserved. All application tables use the bpo_ prefix. Application startup never modifies the schema.
+
+## Local setup
+
+Requires Python 3.12+ (verified on 3.14), Node 24+, and npm.
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r backend\requirements.lock
 .\.venv\Scripts\python.exe -m pip install --no-deps -e './backend[dev]'
 Copy-Item backend\.env.example backend\.env
-Copy-Item frontend\.env.example frontend\.env
+Copy-Item frontend\.env.example frontend\.env.local
+# Fill the public Supabase project settings; keep database/API credentials server-side.
 Set-Location frontend
 npm ci --cache .npm-cache
-Set-Location ..
+npm run dev
 ```
 
-Skip the `Copy-Item` steps when the destination already contains your settings. The backend lock is the resolved Windows/Python 3.14 development environment. On other systems or if a locked wheel is unavailable, install from the portable dependency ranges with `python -m pip install -e './backend[dev]'` and resolve a platform-specific lock. Do not commit `.env` files or credentials. Frontend installs use `package-lock.json`.
-
-## Start the backend
-
-In terminal 1, from the project root:
+Start the backend in a second terminal:
 
 ```powershell
 Set-Location backend
 ..\.venv\Scripts\python.exe -m app.serve
 ```
 
-API: http://127.0.0.1:8000. Interactive API documentation: http://127.0.0.1:8000/docs. Stop with Ctrl+C. The entrypoint selects the Windows selector event loop required by Psycopg. On Linux/macOS use `../.venv/bin/python -m app.serve`.
-
-## Start the frontend
-
-In terminal 2, from the project root:
-
-```powershell
-Set-Location frontend
-npm run dev
-```
-
-Open http://127.0.0.1:5173. Vite proxies `/api` to the backend. Restart Vite after changing `.env`. Only public configuration belongs in `VITE_*` variables; those values are bundled into browser code. The API health card, database readiness card, refresh control, market search/language filter, module navigation, and JSON status export work in Phase 1.
-
-## Configure PostgreSQL
-
-The API can start without a database. Liveness returns 200; readiness deliberately returns 503 until PostgreSQL is configured and reachable. No database schema is created in this phase.
-
-With Docker installed:
-
-```powershell
-Copy-Item .env.example .env
-# Edit .env and set a unique POSTGRES_PASSWORD before starting.
-docker compose up -d postgres
-```
-
-Alternatively, provision a local PostgreSQL database and a dedicated application user. Set `DATABASE_URL` in `backend/.env` to match the actual credentials:
-
-```dotenv
-DATABASE_URL=postgresql+psycopg://bpo:YOUR_URL_ENCODED_PASSWORD@127.0.0.1:5432/bpo_intelligence
-```
-
-Restart the backend. URL-encode special characters in the username/password. When accessing a remote database, use the server's required TLS settings (for example `?sslmode=verify-full` and its trusted certificate configuration). Compose binds PostgreSQL to loopback and persists data in a named volume. `docker compose down` stops it without deleting the data.
-
-## Check health
-
-```powershell
-Invoke-RestMethod http://127.0.0.1:8000/api/v1/health/live
-Invoke-RestMethod http://127.0.0.1:8000/api/v1/health/ready
-# Also verifies the frontend-to-backend development proxy:
-Invoke-RestMethod http://127.0.0.1:5173/api/v1/health/live
-```
-
-Liveness: `{"status":"ok","service":"bpo-intelligence-api","version":"0.1.0"}`.
-
-Readiness with PostgreSQL: `{"status":"ready","database":"connected"}` (HTTP 200). Without configuration: `{"status":"not_ready","database":"not_configured"}` (HTTP 503); connection failures return `database: "unavailable"`. PowerShell reports the expected 503 as an error. Database checks have a five-second time limit; raw driver errors and credentials are not returned.
+Vite serves http://127.0.0.1:5173 and proxies /api to the backend on port 8000. If that port is in use, choose another Vite port. Preview builds do not supply the development proxy.
 
 ## Verification
 
 ```powershell
 Set-Location backend
 ..\.venv\Scripts\python.exe -m pytest -q
-# Optional real database integration check (uses your configured test DB):
-$env:TEST_DATABASE_URL = $env:DATABASE_URL
-# Or set TEST_DATABASE_URL to an actual PostgreSQL connection string.
-..\.venv\Scripts\python.exe -m pytest -q
-Remove-Item Env:TEST_DATABASE_URL -ErrorAction SilentlyContinue
 Set-Location ..\frontend
 npm run build
+node tests/public.smoke.mjs
 ```
 
-Only set `TEST_DATABASE_URL` when a real database exists. This integration check executes `SELECT 1` and does not modify the database. The remaining tests isolate database behavior with mocks, including failure responses. `npm run build` performs strict TypeScript checking and creates `frontend/dist/`. `npm run preview` previews that build; it does **not** supply the development API proxy. Production hosting will need an `/api` reverse proxy or a configured API base URL and CORS policy.
+The browser smoke test uses installed Chrome and defaults to the local preview at http://127.0.0.1:5174. It sends no signup emails. For another development URL set BPO_TEST_URL. Screenshots are ignored under qa-artifacts.
 
-See [verification results](docs/VERIFICATION.md), [architecture and development sequence](docs/ARCHITECTURE.md), and the [complete source-file inventory](docs/FILES.md).
+backend/tests/workspace_integration.sql verifies actual PostgreSQL CRUD, workspace isolation, composite foreign keys, scoring, suppression, member permissions and anonymous denial in a rollback transaction. It leaves no fixtures. The optional local TEST_DATABASE_URL test remains separate from hosted readiness checks.
 
-Cloud deployment preparation for GitHub, Vercel, and Supabase is described in [DEPLOYMENT.md](docs/DEPLOYMENT.md). The root `vercel.json` routes the frontend and backend as two services in one Vercel project; actual deployment and database verification still require connected accounts.
+## Research workflow and limits
 
-## Environment variables
+Research starts only on a signed-in user's explicit action. The server revalidates the Supabase session and workspace membership, reserves a rate-limited job, and starts an OpenAI Responses background request. The browser refreshes saved job state while open; reopening the app resumes access to the same saved job. Provider timeouts and failures are visible. If a start request is interrupted before its provider response ID is saved, the job can remain Starting; starting another run consumes a new quota slot.
 
-| Variable | Location | Purpose/default |
-| --- | --- | --- |
-| `APP_ENV` | backend | `development`, `test`, or `production`; production hides API docs |
-| `LOG_LEVEL` | backend | `INFO`; accepts DEBUG, WARNING, ERROR, CRITICAL |
-| `DATABASE_URL` | backend | Optional async PostgreSQL URL; blank means not configured |
-| `DB_POOL_SIZE`, `DB_MAX_OVERFLOW` | backend | Per-instance connection limits; defaults `2` and `0` |
-| `CORS_ORIGINS` | backend | JSON array of allowed browser origins; local frontend origins by default |
-| `VITE_API_BASE_URL` | frontend | Public API prefix; `/api/v1` |
-| `API_PROXY_TARGET` | frontend | Vite server proxy target; `http://127.0.0.1:8000` |
-| `POSTGRES_DB` | root Compose | Database name |
-| `POSTGRES_USER` | root Compose | Database user |
-| `POSTGRES_PASSWORD` | root Compose | Required, user-supplied password |
-| `TEST_DATABASE_URL` | test process | Optional real PostgreSQL test target |
-| `OPENAI_API_KEY`, `SEARCH_PROVIDER`, `SEARCH_API_KEY`, `APOLLO_API_KEY` | backend | Reserved only; not consumed in Phase 1 |
+The seven research review tasks run in one bounded provider request. This is not seven autonomous workers or an unattended campaign scheduler. Jobs require an OpenAI API key, model access and credits. Provider output is treated as untrusted: structured validation and consulted-source matching happen before CRM import. Imported findings require human verification. No automatic sending, LinkedIn scraping, email guessing, scheduling or purchased contact enrichment is implemented.
 
-## Phase gate and unfinished work
+CSV files are limited to 1,000 rows / 2 MB per import. Native .xlsx upload is not supported; save the spreadsheet as CSV first. A JSON archive is a download format, not a one-click database restore. Deal values are never summed across currencies.
 
-Phase 2 must wait until Phase 1 is verified against a real PostgreSQL instance. Docker and PostgreSQL were unavailable in the initial environment, so database readiness success and Compose execution could not be verified. Browser visual/interaction QA was not available; HTTP startup and a production frontend build were checked.
+See docs/CLOUD_STATUS.md for the latest deployment and verification evidence.
 
-The full dashboard, models, migrations, CRUD, authentication, rate limiting, agent workers, search, OpenAI, contacts, outreach, suppression, exports of business data, and production deployment belong to subsequent phases. Alembic is installed but migrations are deliberately not initialized before Phase 2. The Compose file currently provisions only PostgreSQL; application container images and VPS deployment documentation arrive in Phase 7.
-
-This foundation exposes only health endpoints and binds development servers to loopback. Authentication and production hardening must be implemented before exposing business data or deploying this application publicly.
-
-If a restricted executor reports esbuild parent-directory access errors, run the development command in an ordinary local terminal with access to its project ancestry. Vite uses the native config loader to avoid an unnecessary config bundling step. Keep the project in a directory where your user has normal read access; do not run npm as Administrator as a workaround.
-
-## Implementation references
-
-- [FastAPI lifespan](https://fastapi.tiangolo.com/advanced/events/): resource setup and cleanup.
-- [SQLAlchemy Psycopg dialect](https://docs.sqlalchemy.org/en/20/dialects/postgresql.html#module-sqlalchemy.dialects.postgresql.psycopg): async PostgreSQL engine.
-- [Vite guide](https://vite.dev/guide/): frontend tooling.

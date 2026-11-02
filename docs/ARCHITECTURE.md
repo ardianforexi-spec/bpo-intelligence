@@ -1,53 +1,36 @@
-# Architecture and delivery sequence
+# Architecture
 
-## Phase 1: current foundation
+The application uses React + TypeScript + Vite, Supabase Auth and PostgreSQL, and a FastAPI backend hosted with the frontend through Vercel Services.
 
-```text
-Browser (React + TypeScript + Tailwind)
-    → Vite /api development proxy
-        → FastAPI /api/v1
-            → SQLAlchemy async engine + Psycopg
-                → PostgreSQL
-```
+## User data
 
-Frontend and backend are independent packages. The API factory accepts explicit settings for tests. A lifespan-owned database engine and async session factory provide connection pooling and disposal. No import-time network calls occur. Health endpoints separate API process liveness from database readiness. The frontend reports actual health responses; configured markets and services are explicitly distinct from research results.
+Browser → Supabase Auth → authenticated Data API → PostgreSQL grants and workspace RLS → browser.
 
-The UI implements responsive navigation, system status, refresh/error/loading states, market filtering, and JSON status export. Future modules have roadmap screens. It contains no fake leads or invented performance statistics.
+All bpo_ business tables are private to signed-in workspace owners and members. Composite workspace/entity foreign keys prevent records from linking to another workspace's companies, contacts or campaigns. Workspace ownership is immutable to ordinary members; only owners can add verified existing users or remove access.
 
-The initial workspace was empty and had no Git metadata or repository instructions. Available runtimes were Python 3.14.5 and Node 24.14.0/npm 11.9.0. Docker and PostgreSQL executables/services were not found.
+Privileged membership lookup lives in bpo_private with an explicit auth.uid() owner guard and empty search_path. The public RPC is a security-invoker wrapper. The scoring view uses security_invoker. Anonymous clients have no table privileges.
 
-## Intended extension points
+Business CRUD uses the Supabase Data API directly so client-side sessions are evaluated by the database. The FastAPI PostgreSQL connection remains server-only. Provider research actions authenticate against Supabase Auth and check workspace membership before using that connection.
 
-- `backend/app/api/`: versioned HTTP routes and request/response schemas.
-- `backend/app/core/`: settings, logging, and later authentication/rate limiting.
-- `backend/app/db/`: async sessions; later declarative models and migrations.
-- Future `backend/app/agents/`: seven independently testable agent roles, orchestrated by a research service rather than conversational agents with arbitrary write access.
-- Future `backend/app/integrations/`: search-provider adapters, OpenAI, Apollo, permitted public sources.
-- Future `backend/app/workers/`: durable queued campaign jobs with progress, retries, cancellation, and persisted run logs.
-- `frontend/src/components/`: reusable UI; `frontend/src/lib/`: typed API access.
+## Research
 
-## Delivery sequence
+Browser start → FastAPI session/membership check → rolling quota reservation → OpenAI background Responses web_search → saved provider response ID.
 
-| Phase | Scope | Verification gate |
-| --- | --- | --- |
-| 1 | Package setup, settings, connection, health, UI shell, documentation | Backend tests, build, HTTP startup/proxy, real PostgreSQL readiness |
-| 2 | Normalized companies, contacts, leads, services, sources, signals, campaigns, agent runs, outreach, activities, users; Alembic; CRM CRUD | PostgreSQL migration and CRUD tests, deduplication and validation |
-| 3 | Campaign filters, configurable search, company intelligence, public hiring evidence | Provider contract tests; provenance, dates, unknowns, robots/terms handling |
-| 4 | OpenAI structured analysis, seven agent roles, service matching, weighted 0–100 scoring | Scoring tests and evaluation against source evidence; no invented facts |
-| 5 | Public professional contact research, outreach drafts in English/German, campaign management | Verification status, suppression, approval state; no automatic sending |
-| 6 | Dashboard records, analytics, pagination, CSV/Excel import/export | API/UI integration, accurate aggregates, safe file processing |
-| 7 | Full testing, security review, application containers, VPS deployment | Authentication, access controls, backup/recovery, TLS, deployment checks |
+Browser refresh → authenticated backend → provider result → strict Pydantic schema + consulted URL checks → saved findings.
 
-Authentication must land before business-data endpoints become accessible beyond local development, regardless of the formal security review phase.
+Explicit reviewed import → database row lock → domain deduplication → company/evidence/lead inserts in one transaction. Research output never marks evidence verified. An imported_at marker makes import idempotent even when all companies were duplicates.
 
-## Data and agent design constraints for later phases
+The configured seven review tasks are carried out in one provider request. No arbitrary external tools, arbitrary URL fetcher, autonomous outreach sender or agent-written verified facts are exposed.
 
-Every finding needs a source URL, acquisition date, and verification status. Unknown facts remain unknown. Hiring is a potential demand signal and never proof of outsourcing intent. A 10–20 agent delivery capacity must inform qualification and suggested deal size. Initial score weights are hiring 25, size 15, growth 15, potential demand 20, decision maker 10, verified business contact 10, and recent activity 5. Each awarded component must carry an evidence-backed explanation.
+## Scoring and outreach
 
-Company deduplication should use normalized domains plus reviewed exceptions. Contact deduplication should use scoped normalized professional identifiers; verification and suppression must survive merges. Suppression applies before contact selection or draft workflows. All generated messages remain drafts for human review. Do not add outbound sending without explicit authorization and an implemented approval workflow.
+Each verified evidence category contributes at most once: hiring 25, company size 15, growth 15, potential demand 20, decision maker 10, verified contact 10, recent activity 5. Recent activity requires a date within 90 days. This is evidence coverage, not a probability or a claim of outsourcing intent.
 
-Privacy and outreach requirements in the project brief remain requirements for later implementation, not compliance claims for this foundation. Assess applicable jurisdictions, lawful basis, minimization, retention, deletion, suppression, and contact channels before data collection/outreach features are enabled. Use approved APIs or permitted public sources; do not bypass access controls or scrape LinkedIn.
+Suppression is independent of contact records and survives their deletion/recreation. A new suppression withdraws existing drafts from approval. Database triggers reject new/approved drafts for suppressed contacts and require a verified business contact before approval. Contact verification changes invalidate prior approvals. The app never sends messages.
 
-## Missing configuration
+## Operational boundaries
 
-Required now for the remaining Phase 1 gate: a running PostgreSQL instance and its `DATABASE_URL`. Optional now: Docker for the supplied database service. Required later: selected search provider and key, OpenAI configuration, optionally Apollo, deployment hostname/TLS, user authentication, and jurisdiction-specific data handling/outreach policy. No provider is contacted in Phase 1.
+Schema is managed through the versioned, ordered SQL migrations, not application startup. Authenticated client writes are audited by database triggers. Secrets stay in Vercel production; frontend contains only publishable configuration. Exports belong to the user and should be handled as private business data.
+
+Health endpoints remain public and reveal only liveness/readiness. Provider endpoints require a verified, non-anonymous session. The UI never claims a provider is ready solely because a key exists: actual run failures are shown.
+

@@ -6,6 +6,7 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   return {
     plugins: [react(), tailwindcss()],
+    build: { rollupOptions: { output: { manualChunks: { supabase: ['@supabase/supabase-js'] } } } },
     server: {
       port: 5173,
       strictPort: true,
@@ -15,3 +16,4 @@ export default defineConfig(({ mode }) => {
     },
   }
 })
+

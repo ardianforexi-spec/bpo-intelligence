@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.health import router
+from app.api.research import router as research_router
 from app.core.config import Settings
 from app.db.session import Database
 
@@ -36,15 +37,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         redoc_url=None,
         openapi_url="/openapi.json" if config.app_env != "production" else None,
     )
+    application.state.settings = config
     application.add_middleware(
         CORSMiddleware,
         allow_origins=config.cors_origins,
         allow_credentials=False,
-        allow_methods=["GET"],
-        allow_headers=["Accept", "Content-Type"],
+        allow_methods=["GET", "POST"],
+        allow_headers=["Accept", "Content-Type", "Authorization"],
     )
     application.include_router(router)
+    application.include_router(research_router)
     return application
 
 
 app = create_app()
+

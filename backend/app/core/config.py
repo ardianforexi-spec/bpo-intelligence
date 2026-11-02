@@ -19,6 +19,11 @@ class Settings(BaseSettings):
     app_env: Literal["development", "test", "production"] = "development"
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     database_url: SecretStr | None = None
+    supabase_url: str = "https://ghqimzognkumxfybnucg.supabase.co"
+    supabase_publishable_key: str = ""
+    openai_api_key: SecretStr | None = None
+    openai_model: str = "gpt-5-mini"
+    research_daily_limit: int = Field(default=20, ge=1, le=500)
     db_pool_size: int = Field(default=2, ge=1, le=20)
     db_max_overflow: int = Field(default=0, ge=0, le=20)
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
@@ -49,3 +54,4 @@ class Settings(BaseSettings):
                 url = url.update_query_dict({"sslmode": "require"})
             return SecretStr(url.render_as_string(hide_password=False))
         return value
+
