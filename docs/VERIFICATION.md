@@ -36,3 +36,7 @@ Production sign-in was also opened in headless Chrome against the actual public
 production alias. The email/password form rendered with Supabase configuration and
 no page exceptions. This read-only test submitted no credentials and sent no emails.
 
+Paid-provider authorization tests added: public signup alone cannot access AI,
+nonmembers cannot access a licensed workspace, and licensed team members can.
+Updated backend result: 18 passed, 1 optional local integration test skipped.
+

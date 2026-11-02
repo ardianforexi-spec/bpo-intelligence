@@ -56,6 +56,14 @@ async def access(request: Request, user_id: UUID, workspace_id: UUID) -> None:
           {'workspace':workspace_id,'user':user_id})
     if not allowed:
         raise HTTPException(403,'This workspace is not available to your account.')
+    # Public signup must not grant arbitrary users access to the application's paid provider key.
+    owner_email=request.app.state.settings.research_owner_email.strip().lower()
+    async with database.engine.connect() as connection:
+        licensed=await connection.scalar(text('''select exists(select 1 from public.bpo_workspaces w
+          join auth.users u on u.id=w.owner_id where w.id=:workspace and lower(u.email)=:email
+          and u.email_confirmed_at is not null)'''),{'workspace':workspace_id,'email':owner_email})
+    if not owner_email or not licensed:
+        raise HTTPException(403,'AI research is available only in the configured BPO owner workspace. Ask the owner to add you to their team.')
 
 
 def provider_headers(request: Request) -> dict:
@@ -134,7 +142,7 @@ def extract_findings(response: dict) -> dict:
 @router.get('/capabilities')
 async def capabilities(request: Request) -> dict:
     return {'auth':bool(request.app.state.settings.supabase_publishable_key),
-            'research':bool(request.app.state.settings.openai_api_key),
+            'research':bool(request.app.state.settings.openai_api_key and request.app.state.settings.research_owner_email),
             'daily_research_limit':request.app.state.settings.research_daily_limit,
             'outbound_sending':False}
 

@@ -108,3 +108,9 @@ CSV files are limited to 1,000 rows / 2 MB per import. Native .xlsx upload is no
 
 See docs/CLOUD_STATUS.md for the latest deployment and verification evidence.
 
+Paid AI access is restricted to workspaces owned by the verified account configured
+in the server-only RESEARCH_OWNER_EMAIL setting. Public account registration does
+not grant access to the server's OpenAI key. Team members must be added to that
+owner's workspace. This setting was configured from the connected owner's account;
+change it in Vercel if the BPO owner signs in with a different verified email.
+

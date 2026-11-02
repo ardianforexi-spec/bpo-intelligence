@@ -34,3 +34,7 @@ Schema is managed through the versioned, ordered SQL migrations, not application
 
 Health endpoints remain public and reveal only liveness/readiness. Provider endpoints require a verified, non-anonymous session. The UI never claims a provider is ready solely because a key exists: actual run failures are shown.
 
+AI authorization also checks the verified workspace owner's email against the
+server-only RESEARCH_OWNER_EMAIL configuration. An arbitrary public signup can use
+its own isolated CRM workspace but cannot consume the application's paid OpenAI key.
+

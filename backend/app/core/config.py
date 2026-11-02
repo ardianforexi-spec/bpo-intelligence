@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     openai_api_key: SecretStr | None = None
     openai_model: str = "gpt-5-mini"
     research_daily_limit: int = Field(default=20, ge=1, le=500)
+    research_owner_email: str = ""
     db_pool_size: int = Field(default=2, ge=1, le=20)
     db_max_overflow: int = Field(default=0, ge=0, le=20)
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
