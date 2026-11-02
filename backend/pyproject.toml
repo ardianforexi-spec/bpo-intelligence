@@ -8,6 +8,7 @@ version = "0.1.0"
 description = "BPO Intelligence API"
 requires-python = ">=3.12"
 dependencies = [
+  "alembic>=1.14,<2.0",
   "asyncpg>=0.29,<1.0",
   "fastapi>=0.115,<1.0",
   "pydantic-settings>=2.6,<3.0",

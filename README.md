@@ -73,6 +73,6 @@ This launches PostgreSQL, the API on port 8000, and the dashboard on port 5173.
 
 ## Phase 1 scope and next steps
 
-The database session and configuration are ready, but no business tables or migrations exist yet. Phase 2 will add normalized CRM models, Alembic migrations, authenticated CRUD APIs, deduplication, and basic CRM views. Research agents, external integrations, AI, outreach, and analytics are deliberately deferred until their respective phases.
+Phase 2 CRM foundations include normalized Company, Contact, Lead, research-source and hiring-signal models plus initial CRUD endpoints. Before use, point `DATABASE_URL` to Supabase Postgres and run `alembic upgrade head`. Authentication, research agents, external integrations, AI, outreach, and analytics are deliberately deferred until their respective phases.
 
 Never add provider credentials to source control; use `.env` or your deployment secret manager.
